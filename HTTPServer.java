@@ -1,5 +1,5 @@
 /****************
- *Steven Bartfield - MPCS 54001 - Project 0
+ *Steven Bartfield and Rehan Balagamwala- MPCS 54001 - Project 1
  ****************/
 
 //code snips from http://docs.oracle.com/javase/tutorial/networking/sockets/examples/EchoServer.java
@@ -10,7 +10,7 @@ import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 
-public class ServerEcho {
+public class HTTPServer {
     public static void main(String[] args) throws Exception {
         //tracks to make sure correct number of arguments
         if (args.length != 1) {
