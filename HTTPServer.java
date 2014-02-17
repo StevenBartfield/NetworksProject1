@@ -61,7 +61,7 @@ public class HTTPServer {
 	{
 		System.out.println(files.get(i));
 	}
-*
+*/
 
         //opens a socket at the given port number - opens up a reader and writer
         ServerSocket serverSocket = new ServerSocket(Integer.parseInt(arrInput[1]));
