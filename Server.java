@@ -7,142 +7,108 @@
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Date;
-import java.text.DateFormat;
-import java.util.ArrayList;
 
 public class Server {
 
-    public static ArrayList<String> fileList = new ArrayList<String>();
-    public static ArrayList<String> getFileStructure(String root)
-    {
-        File rootLocation = new File(root);
-        File rootContents[] = rootLocation.listFiles();
-        int j = 0;
-        for (int i = 0; i<rootContents.length; i++) {
-            if (rootContents[i].isDirectory()){
-                getFileStructure(rootContents[i].getPath());//recursively find files
-            }
-            else{
-                fileList.add(j, rootContents[i].getAbsolutePath());
-                j++;
-            }
-        }
-        return fileList;
-    }
-
-    //from http://stackoverflow.com/questions/16027229/reading-from-a-text-file-and-storing-in-a-string
-    public static String readFile(String fileName) throws IOException {
-        BufferedReader br = new BufferedReader(new FileReader(fileName));
-        try {
-            StringBuilder sb = new StringBuilder();
-            String line = br.readLine();
-
-            while (line != null) {
-                sb.append(line);
-                sb.append("\n");
-                line = br.readLine();
-            }
-            return sb.toString();
-        } finally {
-            br.close();
-        }
-    }
-
     public static void main(String[] args) throws Exception {
-        //parse out the port number
-        String[] arrInput = args[0].split("=");
 
+        //------------------------------------------------------------------------------
+        //Setting up the sockets and defining variables
+        //------------------------------------------------------------------------------
+
+        String[] arrInput = args[0].split("=");            //parse out the port number
         ServerSocket serverSocket = new ServerSocket(Integer.parseInt(arrInput[1]));
         Socket clientSocket = serverSocket.accept();
         BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-        //BufferedWriter out = new BufferedWriter(new OutputStreamWriter(clientSocket.getOutputStream()));
-        PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
-
-        //DataOutputStream out = new DataOutputStream(clientSocket.getOutputStream());
-
-
+        DataOutputStream out = new DataOutputStream(clientSocket.getOutputStream());
 
         String strInput;
+        String strPath;
 
+        //------------------------------------------------------------------------------
+        //Parsing out request and building the header file
+        //------------------------------------------------------------------------------
 
+        //Parse out the requested file from the client request string
         strInput = in.readLine();
-        System.out.println(strInput);
-        File fileInput = new File(strInput);
+        int nPathEnd = strInput.indexOf("HTTP") - 1;  //indexes the end of request
+        strPath = strInput.substring(5, nPathEnd);   //pulls the request out
+        //File fileInput = new File(strInput); //keeping in case i need it later -- but can probably remove
 
-        //HARDCODED FOR NOW
-        String strHeader =  "HTTP/1.1 200 OK \r\n";
-        strHeader += "Content-Length: ";
-        strHeader += fileInput.length() + "\r\n";
-        strHeader += "Content-Type: ";
-        strHeader += "text/html" + "\r\n";
+        //Create the header and send back to client
+        System.out.println(strPath); //for debugging
+        String strHeader = createHeader(strPath);
+        System.out.println(strHeader); //for debugging
+        out.writeBytes(strHeader + "\r\n");
 
-        //HEADER SENT BACK TO USER
-        //out.writeBytes(strHeader + "\r\n\n");
-        out.println(strHeader + "\r\n\n");
+        //------------------------------------------------------------------------------
+        //Handling the rest of the file request -- will fail if there is no file to be transmitted (404 was delivered)
+        //------------------------------------------------------------------------------
+        try{
+            //get the file per the request and input it into the file stream
+            File fileRequested = new File(strPath);
+            FileInputStream fileOutbound = new FileInputStream(fileRequested);
 
+            //preparing the file to be transmitted
+            int nByteSize = (int) fileRequested.length();    //find the number bytes in the file
+            byte[] bytFile = new byte[nByteSize];  //putting the file into bytes
+            fileOutbound.read(bytFile);  //read the bytes into a new file to be sent out
 
-        String strOutput;
-        int nPathEnd = strInput.indexOf("HTTP/") - 1;
-        String strPath = strInput.substring(5, nPathEnd);
-        File fileRequested = new File(strPath);
-
-        System.out.println(strPath);
-        //see if the file is infact there
-        if (fileRequested.isFile()){
-            System.out.println("The file exists!!");
+            //Transmit the data to client
+            out.write(bytFile, 0, nByteSize);
+        }catch(Exception e){
+            out.writeBytes("No File!\r\n"); //for 404 requests //find out what should actually be written in the body for 404s.. if anything?
         }
 
-        strOutput = readFile(strPath);
+        //------------------------------------------------------------------------------
+        //Closing off the connection
+        //------------------------------------------------------------------------------
 
-        System.out.println(strOutput);//print to server
-
-        //this is the line of code that is not sending to the client for some reason (or curl is not printing)!!!!!!!
-        out.println(strOutput);  //print to client
-
-
-        System.err.println("Connection terminated");
+        //Ending the connection
+        System.err.println("Connection terminated"); //will play a better role once we get the connection to stay open
         out.close();
         in.close();
         clientSocket.close();
-
-
-
-
     }
+
+
+    //------------------------------------------------------------------------------
+    //Methods to help build appropriate headers
+    //------------------------------------------------------------------------------
+
+    //Method creates the header for the inputted path request
+    public static String createHeader(String strPathInput){
+        String strHeader; //create string variable
+        File fileRequested = new File(strPathInput); //gets file requested to find length
+
+        //check if file exists, if not then send 404
+        if (!fileRequested.exists()){
+            strHeader =  "HTTP/1.1 404 Not Found \r\n";
+            strHeader += "Content-Length: 10 \r\n";   //MUST CORRESPOND TO WHAT EVER IS SENT IN CATCH CLAUSE -- ADJUST ACCORDINGLY
+            strHeader += "Content-Type: text/html \r\n";  //does this even matter?
+            return strHeader;
+        }
+
+        //for paths that exist (redirect to be coded in future)
+        strHeader =  "HTTP/1.1 200 OK \r\n";
+        strHeader += "Content-Length: " + fileRequested.length() + "\r\n";
+        strHeader += "Content-Type: " + findContentType(strPathInput) + "\r\n";
+        //should add more in the header later
+        return strHeader;
+    }
+
+
+    //returns the content type file of the path request
+    public static String findContentType(String strPathInput){
+        String strContentType = ""; //initialize the variable
+        if      (strPathInput.endsWith("html")){strContentType = "text/html";}
+        else if (strPathInput.endsWith("txt")){strContentType = "text/plain";}
+        else if (strPathInput.endsWith("jpeg")){strContentType = "image/jpeg";}  //do we need to do jpg?
+        else if (strPathInput.endsWith("png")){strContentType = "image/html";}
+        else if (strPathInput.endsWith("pdf")){strContentType = "application/pdf";}
+        else if (strPathInput.endsWith("exe")){strContentType = "application/octet-stream";} //need to look into
+        System.out.println(strContentType); //for debugging
+        return strContentType;
+    }
+
 }
-
-
-//    public static void generateReponse(String filePath, PrintWriter out){
-//        try{
-//            //* error is at requestFile trying to write the response back to the server before we close the connection
-//            File responseFile = new File(requestPath);
-//            contentLength = responseFile.length();
-//            System.out.println(contentLength);
-//
-//        }
-//        catch(Exception e){
-//        }
-//
-//        java.util.Date date1 = new java.util.Date();
-//        out.println(protocol + " " + statusCode + " OK\n"
-//                +date1 + "\n"
-//                + "Accept-Ranges: bytes\n"
-//                + "Content-Length: "+ contentLength+"\n"
-//                + "Connection: "+ connectionStatus + "\n"
-//                + "Content-Type: "+ extension+"\r\n");
-//
-//        try{
-//            //* error is at requestFile trying to write the response back to the server before we close the connection
-//            File responseFile = new File(requestPath);
-//            Scanner responseScan = new Scanner(responseFile);
-//
-//            while(responseScan.hasNextLine()){
-//                String response = responseScan.nextLine();
-//                out.println(response);
-//            }
-//
-//        }
-//        catch(Exception e){
-//        }
-//    }
