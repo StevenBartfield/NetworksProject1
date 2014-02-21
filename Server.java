@@ -2,8 +2,6 @@
  *Steven Bartfield and Rehan Balagamwala- MPCS 54001 - Project 1
  ****************/
 
-//code snips from http://docs.oracle.com/javase/tutorial/networking/sockets/examples/EchoServer.java
-
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -16,37 +14,26 @@ public class Server {
         //------------------------------------------------------------------------------
         //Setting up the sockets and defining variables
         //------------------------------------------------------------------------------
-
         String[] arrInput = args[0].split("=");            //parse out the port number
-        ServerSocket serverSocket = new ServerSocket(Integer.parseInt(arrInput[1]));
-        Socket clientSocket = serverSocket.accept();
-        BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-        DataOutputStream out = new DataOutputStream(clientSocket.getOutputStream());
 
-        String strInput;
-        String strPath = null;
-        String strRequestType;
+        while (true){    //will continue to look for requests
 
-        //SETTING UP SO IT WILL CONSISTANTLY RUN
+            ServerSocket serverSocket = new ServerSocket(Integer.parseInt(arrInput[1]));
+            Socket clientSocket = serverSocket.accept();
+            BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            DataOutputStream out = new DataOutputStream(clientSocket.getOutputStream());
 
-        //while ( (strInput = in.readLine()) != null){
-        //while (in.ready()){
-//            if (!in.ready()){
-//                   strInput = in.readLine();
-//            }
-            //strInput = in.readLine();
-//            if (strInput.equals(null) || strInput.isEmpty() || strInput == ""){
-//                continue;
-//            }
-            strInput = in.readLine();
+            //read in top line, if empty then wait for user request
+            String strInput = in.readLine();
+            if (strInput.isEmpty()){ continue; }
 
             //------------------------------------------------------------------------------
             //Parsing out request and building the header file
             //------------------------------------------------------------------------------
 
             //Parse out the requested file from the client request string
-            //strInput = in.readLine();
-            strRequestType = strInput.substring(0,4); //pulls the request out
+            String strRequestType = strInput.substring(0,4); //pulls the request out
+            String strPath = null;
 
             //check for request type and handle accordingly
             if (strRequestType.equals("GET ")){
@@ -56,21 +43,24 @@ public class Server {
                 strPath = strInput.substring(6, strInput.indexOf("HTTP") - 1);
             }
 
-
-            System.out.println(strInput);
-            System.out.println(strRequestType);
-            System.out.println(strPath);
+            //FOR TEST PURPOSES ONLY - Too shutdown server without killing port ("http....edu/####/QUIT")
+            if (strPath.equals("QUIT")){
+                System.err.println("Connection terminated");
+                out.close();
+                in.close();
+                clientSocket.close();
+                serverSocket.close();
+                return;
+            }
 
             //Create the header and send back to client
-            System.out.println(strPath); //for debugging
             String strHeader = createHeader(strPath, strRequestType);
-            System.out.println(strHeader); //for debugging
             out.writeBytes(strHeader + "\r\n");
-            System.out.println(strHeader.substring(9,12));
 
             //------------------------------------------------------------------------------
             //Handling the rest of the file request -- will fail if there is no file to be transmitted (404 was delivered)
             //------------------------------------------------------------------------------
+
             //only retrieve if a GET file and not a redirect
             if (strRequestType.equals("GET ") && (!strHeader.substring(9,12).equals("301")))    {
                 try{
@@ -79,7 +69,7 @@ public class Server {
                     FileInputStream fileOutbound = new FileInputStream(fileRequested);
 
                     //preparing the file to be transmitted
-                    int nByteSize = (int) fileRequested.length();    //find the number bytes in the file
+                    int nByteSize = (int) fileRequested.length();  //find the number bytes in the file
                     byte[] bytFile = new byte[nByteSize];  //putting the file into bytes
                     fileOutbound.read(bytFile);  //read the bytes into a new file to be sent out
 
@@ -89,17 +79,20 @@ public class Server {
                     out.writeBytes("No File!\r\n"); //for 404 requests //find out what should actually be written in the body for 404s.. if anything?
                 }
             }
+
+            //Remove the rest of client's header from the buffer
+            while ( (strInput = in.readLine()) != null){
+                //System.out.println(strInput); //printing out full request for debug purposes
+            }
+
             //------------------------------------------------------------------------------
-            //Closing off the connection
+            //Closing off the current connection
             //------------------------------------------------------------------------------
 
-            //Ending the connection
-            System.err.println("Connection terminated"); //will play a better role once we get the connection to stay open
             out.close();
             in.close();
-            clientSocket.close();
-
-        //}   //end while loop
+            serverSocket.close();
+        }
     }
 
     //------------------------------------------------------------------------------
@@ -144,7 +137,7 @@ public class Server {
         strHeader =  "HTTP/1.1 200 OK \r\n";
         strHeader += "Content-Length: " + fileRequested.length() + "\r\n";
         strHeader += "Content-Type: " + findContentType(strPathInput) + "\r\n";
-        //should add more in the header later
+        strHeader += "Connection: Keep-Alive" + "\r\n";
         return strHeader;
     }
 
@@ -158,7 +151,6 @@ public class Server {
         else if (strPathInput.endsWith("png")){strContentType = "image/html";}
         else if (strPathInput.endsWith("pdf")){strContentType = "application/pdf";}
         else if (strPathInput.endsWith("exe")){strContentType = "application/octet-stream";} //need to look into
-        System.out.println(strContentType); //for debugging
         return strContentType;
     }
 
@@ -178,6 +170,5 @@ public class Server {
         }
         return strRedirectPath; //no redirect path
     }
-
 
 }
